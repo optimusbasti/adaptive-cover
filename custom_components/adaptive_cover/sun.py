@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
+from astral import Observer
+from astral.sun import azimuth, elevation, sunrise, sunset
 import pandas as pd
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.sun import get_astral_location
 
 
 class SunData:
@@ -15,7 +16,10 @@ class SunData:
     def __init__(self, timezone: str, hass: HomeAssistant) -> None:
         """Initialise location, elevation and timezone from HA config."""
         self.hass = hass
-        self.location, self.elevation = get_astral_location(self.hass)
+        latitude = hass.config.latitude
+        longitude = hass.config.longitude
+        self.observer = Observer(latitude, longitude, hass.config.elevation)
+        self.sea_level_observer = Observer(latitude, longitude)
         self.timezone = timezone
 
     @property
@@ -34,24 +38,18 @@ class SunData:
     def solar_azimuth(self) -> list[float]:
         """Return solar azimuth for each 5-minute slot today."""
         # OPTIM: list comprehension — eliminates manual index for-loop
-        return [
-            self.location.solar_azimuth(t, self.elevation)
-            for t in self.times
-        ]
+        return [azimuth(self.observer, t.astimezone(UTC)) for t in self.times]
 
     @property
     def solar_elevation(self) -> list[float]:
         """Return solar elevation for each 5-minute slot today."""
         # OPTIM: list comprehension — eliminates manual index for-loop
-        return [
-            self.location.solar_elevation(t, self.elevation)
-            for t in self.times
-        ]
+        return [elevation(self.observer, t.astimezone(UTC)) for t in self.times]
 
     def sunset(self) -> datetime:
         """Return today's sunset time (UTC)."""
-        return self.location.sunset(date.today(), local=False)
+        return sunset(self.sea_level_observer, date.today())
 
     def sunrise(self) -> datetime:
         """Return today's sunrise time (UTC)."""
-        return self.location.sunrise(date.today(), local=False)
+        return sunrise(self.sea_level_observer, date.today())
